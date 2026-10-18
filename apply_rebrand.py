@@ -71,6 +71,7 @@ def main() -> None:
         print(f"icon replaced: apps/app/icons/{name}")
 
     strip_promotion_ads()
+    strip_plus_menu_entry()
 
     # Sanity check.
     conf = TAURI_CONF.read_text(encoding="utf-8")
@@ -81,7 +82,45 @@ def main() -> None:
     promo = PROMOTION_VUE.read_text(encoding="utf-8")
     assert "modrinth.plus" not in promo, "upsell link was not removed"
     assert "ad-parent" not in promo, "hosting ad was not removed"
+    app_vue = APP_VUE.read_text(encoding="utf-8")
+    assert "id: 'plus'" not in app_vue, "plus menu entry was not removed"
     print("PortaCraft rebrand applied successfully.")
+
+
+APP_VUE = ROOT / "apps/app-frontend/src/App.vue"
+
+
+def strip_plus_menu_entry() -> None:
+    """Remove the 'Upgrade to Modrinth+' entry from the account dropdown menu.
+
+    Finds the menu option object with id 'plus' and removes it, verifying the
+    modrinth.plus link is inside so an upstream restructure fails loudly.
+    """
+    p = APP_VUE
+    if not p.is_file():
+        sys.exit(f"ERROR: not found: {p} (run this script from the repo root)")
+    text = p.read_text(encoding="utf-8")
+    if "PortaCraft: plus menu removed" in text:
+        print(f"already applied, skipping: {p}")
+        return
+    anchor = "\t{\n\t\tid: 'plus',"
+    count = text.count(anchor)
+    if count != 1:
+        sys.exit(f"ERROR: plus menu anchor found {count} times (expected 1) in {p}")
+    start = text.find(anchor)
+    end = text.find("\n\t},", start)
+    if end == -1:
+        sys.exit(f"ERROR: plus menu block end not found in {p}")
+    end += len("\n\t},")
+    segment = text[start:end]
+    if "modrinth.plus" not in segment:
+        sys.exit(
+            f"ERROR: expected modrinth.plus link not in plus menu block in {p} — "
+            "upstream changed the file, patch needs review"
+        )
+    new = text[:start] + "\t// PortaCraft: plus menu removed\n" + text[end:]
+    p.write_text(new, encoding="utf-8")
+    print(f"patched: {p} [plus menu entry removed]")
 
 
 PROMOTION_VUE = ROOT / "apps/app-frontend/src/app/shell/sidebar/promotion.vue"
