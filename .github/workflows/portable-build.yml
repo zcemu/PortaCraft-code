@@ -5,7 +5,8 @@
 # - Push a tag like `portable-v1`: builds, then publishes a GitHub Release
 #   with Modrinth-App-Portable.zip attached (exe + empty portable.txt).
 #
-# Requires in the repo root: apply_portable.py (already applied before build),
+# Requires in the repo root: apply_portable.py (portable mode),
+# apply_rebrand.py + rebrand-icons/ (PortaCraft rename + icons),
 # README-portable.md (bilingual, used as release notes).
 #
 # NOTE: untested against the real repo state; first build takes ~30-60 min.
@@ -28,6 +29,24 @@ jobs:
       - name: Apply portable-mode patch
         shell: pwsh
         run: python apply_portable.py
+
+      - name: Apply PortaCraft rebrand
+        # Renames productName/identifier/window title and swaps the icons.
+        # Requires apply_rebrand.py + rebrand-icons/ at the repo root.
+        shell: pwsh
+        run: python apply_rebrand.py
+
+      - name: Verify patches applied
+        # Safety net: fail loudly instead of shipping a build with ads/branding.
+        shell: bash
+        run: |
+          set -e
+          grep -qF '"productName": "PortaCraft"' apps/app/tauri.conf.json
+          grep -qF 'PortaCraft: promo removed' apps/app-frontend/src/app/shell/sidebar/promotion.vue
+          grep -qF 'PortaCraft: plus menu removed' apps/app-frontend/src/App.vue
+          grep -qF 'WEBVIEW2_USER_DATA_FOLDER' apps/app/src/main.rs
+          grep -qF 'portable_data_dir' packages/app-lib/src/state/dirs.rs
+          echo "all patches verified"
 
       - name: Sync version with latest official release
         # The repo ships version "1.0.0-local"; official CI overwrites it from
@@ -103,14 +122,14 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType File -Path "target/release/portable.txt" -Force
-          Compress-Archive -Path "target/release/Modrinth App.exe", "target/release/portable.txt" `
-            -DestinationPath "target/release/Modrinth-App-Portable.zip" -Force
+          Compress-Archive -Path "target/release/PortaCraft.exe", "target/release/portable.txt" `
+            -DestinationPath "target/release/PortaCraft-Portable.zip" -Force
 
       - name: Upload portable zip
         uses: actions/upload-artifact@v4
         with:
-          name: modrinth-app-portable-windows
-          path: target/release/Modrinth-App-Portable.zip
+          name: portacraft-portable-windows
+          path: target/release/PortaCraft-Portable.zip
 
   release:
     needs: build
@@ -125,10 +144,10 @@ jobs:
       - name: Download portable zip
         uses: actions/download-artifact@v4
         with:
-          name: modrinth-app-portable-windows
+          name: portacraft-portable-windows
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: Modrinth-App-Portable.zip
+          files: PortaCraft-Portable.zip
           body_path: README-portable.md
